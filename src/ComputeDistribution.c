@@ -10,6 +10,7 @@
 
 #include "Utils.h"
 #include "Tree.h"
+#include "TreeBounds.h"
 #include "SimulTree.h"
 #include "Model.h"
 #include "Uncertainty.h"
@@ -46,11 +47,11 @@
 #define M_MAX_F 4
 #define MIN_TREE 20
 #define MAX_TRIALS 1000
+#define MAX_PIECES 20
 
 #define PREFIX "table"
 
-#define HELPMESSAGE "NAME\n\tdist - divergence time distributions of a phylogenetic tree under the birth-death-sampling model.\n\t\nSYNOPSIS\n\tdist [OPTIONS] <input Tree File> <output Ident>\n\nDESCRIPTION\n\tCompute the divergence time distribution of the phylogenetic tree contained in <input Tree File> (which must be in Newick format) with regards  to the parameters provided as options and output the results as array/text files '.csv' and as a figure if the option '-f' is set.\n\n\tOptions are\n\t-o <origin time> <end time>\n\t\tset the origin and end time of the diversification process resulting to the phylogenetic tree. \n\t-p <speciation rate> <extinction rate> <sampling probability>\n\t\tset the parameters of the birth-death-sampling model. \n\t-e\n\t\tdisplay probability densities (distributions otherwise).\n\t-z <input Tree File>\n\t\toutput the tree in 'text' format in the console and save it in pdf format as 'tree.pdf' with the internal idents of the nodes (for debug purposes) next exit\n\t-n <node number>\n\t\tcompute distribution of only one node (use -z option to see the node numbers).\n\t-d <number>\n\t\tset the number of points of the distributions computed.\n\t-f <number>\n\t\tset the graphic format of the output (option is required if one wants a graphic output)\n\t\t\t-f 1 -> pdf\n\t\t\t-f 2 -> postscript\n\t\t\t-f 3 -> png\n\t\t\t-f 4 -> svg\n\t\t\t-f 5 -> LaTeX (psTricks)\n\t\t\t-f 6 -> LaTeX (TikZ)\n\t-c <r1> <g1> <b1> <r2> <g2> <b2>\n\t\tset the color scale to go from the color (r1,g1,b1) to the color (r2,g2,b2) (rgb codes of colors have their components in [0,1])\n\t-h\n\t\tdisplay help\n"
-
+#define HELPMESSAGE "NAME\n	dist - divergence time distributions of a phylogenetic tree under the birth-death-sampling model.\n	\nSYNOPSIS\n	dist [OPTIONS] <input Tree File> <output Ident>\n\nDESCRIPTION\n	Compute the divergence time distribution of the phylogenetic tree contained in <input Tree File> (which must be in Newick format) with regards  to the parameters provided as options and output the results as array/text files '.csv' and as a figure if the option '-f' is set. Result files are save in the working directory.\n\n	Options are\n	-o <origin time> <end time>\n		set the origin and end time of the diversification process resulting to the phylogenetic tree. \n	-p <start time> <speciation rate> <extinction rate> <sampling probability>\n		set the parameters of the piece starting at <starting time> of a piecewise-constant-birth-death-sampling model. \n	-e\n		display probability densities (distributions otherwise).\n	-z <input Tree File>\n		output the tree in 'text' format in the console and save it in pdf format as 'tree.pdf' with the internal idents of the nodes (for debug purposes) next exit\n	-n <node number>\n		compute distribution of only one node (use -z option to see the node numbers).\n	-d <number>\n		set the number of points of the distributions computed.\n	-f <number>\n		set the graphic format of the output (option is required if one wants a graphic output)\n			-f 1 -> pdf\n			-f 2 -> postscript\n			-f 3 -> png\n			-f 4 -> svg\n			-f 5 -> LaTeX (psTricks)\n			-f 6 -> LaTeX (TikZ)\n	-c <r1> <g1> <b1> <r2> <g2> <b2>\n		set the color scale to go from the color (r1,g1,b1) to the color (r2,g2,b2) (rgb codes of colors have their components in [0,1])\n	-h\n		display help\n"
 //./dist -p 0.1 0.02 0.5 -e -o 0 10 -d 1000 ../figures/trees/treeA.newick 
 
 //./dist -p 0.1 0.02 0.5 TEST4.txt 
@@ -59,9 +60,15 @@ int main(int argc, char **argv) {
 	char inputFileNameTree[STRING_SIZE], *outputPrefix = PREFIX, outputDistribution[STRING_SIZE], option[256], format = '1';
 	FILE *fi, *fo;
 	int i, j, node = NOSUCH, def=10, outDens = 0, max_size = INT_MAX;
-	double contemp = 0.,  origin = -100.;
-	TypeModelParam param = {.birth=0.3, .death = 0.1, .sampl=1.};
+	double val = NEG_INFTY,  contemp = 0.,  origin = -100., *startTmp;
+	TypeModelParam *paramTmp;
+	TypePiecewiseModelParam piece;
 	TypeTree *tree;
+	size_t *pieceIndex;
+	
+	piece.size = 0;
+	piece.startTime = (double*) malloc(MAX_PIECES*sizeof(double));
+	piece.param = (TypeModelParam*) malloc(MAX_PIECES*sizeof(TypeModelParam));
 	
 	for(i=0; i<256; i++)
 		option[i] = 0;
@@ -83,6 +90,7 @@ int main(int argc, char **argv) {
 				TypeTree *tree;
 				tree = readTree(fi);
 				printTreeDebug(stdout, tree->root, tree, tree->name);
+//				bltoabsTime(tree);
 				reorderTree(tree->name, tree);
 				if(tree->minTime == NO_TIME || tree->minTime == 0.)
 					tree->minTime = tree->time[tree->root]*0.9;
@@ -114,18 +122,23 @@ int main(int argc, char **argv) {
 		}
 		if(option['p']) {
 			option['p'] = 0;
-			if((i+1)<argc && sscanf(argv[i+1], "%le", &(param.birth)) == 1)
+			if((i+1)<argc && sscanf(argv[i+1], "%le", &(piece.startTime[piece.size])) == 1)
 				i++;
 			else
 				exitProg(ErrorArgument, "3 values are expected after -p");
-			if((i+1)<argc && sscanf(argv[i+1], "%lf", &(param.death)) == 1)
+			if((i+1)<argc && sscanf(argv[i+1], "%le", &(piece.param[piece.size].birth)) == 1)
 				i++;
 			else
 				exitProg(ErrorArgument, "3 values are expected after -p");
-			if((i+1)<argc && sscanf(argv[i+1], "%lf", &(param.sampl)) == 1)
+			if((i+1)<argc && sscanf(argv[i+1], "%lf", &(piece.param[piece.size].death)) == 1)
 				i++;
 			else
 				exitProg(ErrorArgument, "3 values are expected after -p");
+			if((i+1)<argc && sscanf(argv[i+1], "%lf", &(piece.param[piece.size].sampl)) == 1)
+				i++;
+			else
+				exitProg(ErrorArgument, "3 values are expected after -p");
+			piece.size++;
 		}
 		if(option['e']) {
 			option['e'] = 0;
@@ -152,6 +165,13 @@ int main(int argc, char **argv) {
 			else
 				exitProg(ErrorArgument, "1 number are expected after -d");
 		}
+		if(option['v']) {
+			option['v'] = 0;
+			if((i+1)<argc && sscanf(argv[i+1], "%le", &(val)) == 1)
+				i++;
+			else
+				exitProg(ErrorArgument, "1 number are expected after -v");
+		}
 		if(option['h']) {
 			option['h'] = 0;
 			printf("%s\n", HELPMESSAGE);
@@ -164,18 +184,33 @@ int main(int argc, char **argv) {
 	}
 	if(i<argc)
 		outputPrefix = argv[i++];
+	pieceIndex = qsortTable(piece.startTime, piece.size, sizeof(double), compareDouble);
+	startTmp = (double*) malloc((piece.size+1)*sizeof(double));
+	paramTmp = (TypeModelParam*) malloc(piece.size*sizeof(TypeModelParam));
+	for(i=0; i<piece.size; i++) {
+		startTmp[pieceIndex[i]] = piece.startTime[i];
+		paramTmp[pieceIndex[i]] = piece.param[i];
+	}
+	startTmp[0] = origin;
+	startTmp[piece.size] = contemp;
+	free((void*)pieceIndex);
+	free((void*)piece.startTime);
+	free((void*)piece.param);
+	piece.startTime = startTmp;
+	piece.param = paramTmp;
     if((fi = fopen(inputFileNameTree, "r"))) {
 		TypeDistribution *d;
 		TypeInfoDrawTreeGeneric info;
 		TypeAdditionalDrawTreeGeneric add;
 		TypeDataDrawDensity dataD;		
-		double *timeSave, *timeSaveX;
+		double *timeSave, *timeSaveX, *tmin, *tmax;
 		int n, *todo;
         tree = readTree(fi);
         fclose(fi);
         if(tree == NULL)
             return 1;
         toBinary(tree);
+//        reorderTree(tree->name, tree);
         reorderTree(NULL, tree);
 		tree->minTime = origin;
 		tree->maxTime = contemp;
@@ -187,6 +222,11 @@ int main(int argc, char **argv) {
 			else
 				tree->time[n] = NO_TIME;
 		}
+		tmin = (double*) malloc(tree->size*sizeof(double));
+		tmax = (double*) malloc(tree->size*sizeof(double));
+		fillBoundsFromComments(tmin, tmax, tree);
+		//for(n=0; n<tree->size; n++)
+			//printf("node %d min %.2lf max %.2lf\n", n, (tmin[n]!=NO_TIME)?tmin[n]:sqrt(-1), (tmax[n]!=NO_TIME)?tmax[n]:sqrt(-1));
 		todo = (int*) malloc(tree->size*sizeof(int));
 		if(node != NOSUCH && node>=tree->size)
 			node = NOSUCH;
@@ -200,7 +240,16 @@ int main(int argc, char **argv) {
 			if(tree->node[node].child != NOSUCH)
 				todo[node] = 1;
 		d = (TypeDistribution*) malloc(tree->size*sizeof(TypeDistribution));
-		fillDistributionAll(def, tree, &param, todo, d);
+		fillDistributionAllGeneral(def, tmin, tmax, tree, &piece, todo, d);
+//		fillDistributionAll(def, tree, &param, todo, d);
+//printf("\nOK\n");
+//printf("OK dist %d\n", d[5].size);
+//deriveDistribution(&(d[5]));
+//if((fo = fopen("out.csv", "w"))) {
+//fprintDistribution(fo, d[5]);
+//fclose(fo);
+//}
+//exit(0);
 		for(n=0; n<tree->size; n++) {
 			if(todo[n]) {
 				sprintf(outputDistribution, "%s%d.csv", outputPrefix, n);
@@ -225,13 +274,13 @@ int main(int argc, char **argv) {
 		}
 		for(n=0; n<tree->size; n++)
 			deriveDistribution(&(d[n]));
-if((fo = fopen("out.csv", "w"))) {
-fprintDistribution(fo, d[1]);
-fclose(fo);
-}
+//		fprintTreeNewick(stdout, tree);
 		if(format != '0') {
 			char outputFileNameG[SIZE_BUFFER_CHAR], *outputFileName;
+//			outputFileName = inputFileNameTree;
 			outputFileName = outputPrefix;
+			//if((tmp = strrchr(outputFileName, '.')) != NULL)
+				//tmp[0] = '\0';
 			info.param.tmin = tree->minTime;
 			info.param.tmax = tree->maxTime;
 //			dataD.color = (TypeRGB) {.red = 1., .green = 0., .blue = 0.};
@@ -285,8 +334,12 @@ fclose(fo);
 		tree->time = timeSaveX;
 		fprintf(stdout,"\nplot");
 		for(n=0; n<tree->size; n++) {
-			if(todo[n])
-				fprintf(stdout," '%s%d.csv' using 1:2 with lines title 'node %d',", outputPrefix, n, n);
+			if(todo[n]) {
+				if(tree->name != NULL && tree->name[n] != NULL)
+					fprintf(stdout," '%s%d.csv' using 1:2 with lines title 'node %s',", outputPrefix, n, tree->name[n]);
+				else
+					fprintf(stdout," '%s%d.csv' using 1:2 with lines title 'node %d',", outputPrefix, n, n);
+			}
 		}
 		fprintf(stdout,"\n\n");
 		if(d != NULL) {

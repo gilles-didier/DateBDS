@@ -14,9 +14,12 @@ Directory "src" contains the C sources of the software and Directory "data" cont
 
 In a console opened in the directory "src", you could write
 
-./dist -f 1 -p 0.1 0.01 0.1 -o -33 0 -e -d 500 ../data/A.phy
+./dist -f 1 -o 0 10 -p 0 0.1 0.01 0.1 -p 5 0.9 0.1 0.7 -e -d 500 ../data/A.phy
 
-./samp -p 0.1 0.01 0.1 -o -33 0 ../data/A.phy
+./samp -o 0 10 -p 0 0.1 0.01 0.1 -p 5 0.9 0.1 0.7 ../data/A.phy
+
+./asse -a 0.6 -b 1. -s 5  -t 10 -i 25000 -m 10 -M 50000 -x 8 Test
+
 
 A complete description of the options allowed is given below.
 
@@ -63,8 +66,8 @@ DESCRIPTION
 	Options are
 	-o <origin time> <end time>
 		set the origin and end time of the diversification process resulting to the phylogenetic tree. 
-	-p <speciation rate> <extinction rate> <sampling probability>
-		set the parameters of the birth-death-sampling model. 
+	-p <start time> <speciation rate> <extinction rate> <sampling probability>
+		set the parameters of the piece starting at <starting time> of a piecewise-constant-birth-death-sampling model. 
 	-e
 		display probability densities (distributions otherwise).
 	-z <input Tree File>
@@ -132,8 +135,8 @@ DESCRIPTION
 	Options are
 	-o <origin time> <end time>
 		set the origin and end time of the diversification process resulting to the phylogenetic tree. 
-	-p <speciation rate> <extinction rate> <sampling probability>
-		set the parameters of the birth-death-sampling model. 
+	-p <start time> <speciation rate> <extinction rate> <sampling probability>
+		set the parameters of the piece starting at <starting time> of a piecewise-constant-birth-death-sampling model. 
 	-z <input Tree File>
 		output the tree in 'text' format in the console and save it in pdf format as 'tree.pdf' with the internal idents of the nodes (for debug purposes) next exit
 	-e <value>
@@ -142,3 +145,69 @@ DESCRIPTION
 		display help
 
 --------------------------
+
+
+--------
+| shif |
+--------
+
+--------------------------
+REQUIREMENT
+
+	The software requires the GSL and the NLOpt libraries.
+
+--------------------------
+COMPILING
+
+	Just type
+	> make shif
+	in a console opened on the directory containing the source files to build the binary.
+
+--------------------------
+DESCRIPTION
+
+	'shif' computes ROC plots for 4 tests of diversification shifts from Yule tree simulations
+
+
+--------------------------
+--------------------------
+MANUAL
+--------------------------
+--------------------------
+
+
+--------------------------
+
+NAME
+	shif - ROC plots of diversification shift tests
+	
+SYNOPSIS
+	shif [OPTIONS] <output Ident>
+
+DESCRIPTION
+	Compute ROC plots for 4 tests of diversification shifts from Yule tree simulations. Results are returned as 4 table files with names "ROC_?_<output Ident>.csv" where columns 1 and 2 is the true and the false positive rates respectively. 
+
+	Options are
+	-o <NLopt option file>
+		read the numerical optimizers parameters from  <NLopt option file>
+	-a <birth rate>
+		set the general birth rate
+	-b <birth rate>
+		set the shifted birth rate
+	-s <time>
+		set the shift time
+	-t <time>
+		set the total diversification time (it starts from time 0)
+	-i <number>
+		set the number of simulations
+	-x <number>
+		set the number of simultaneous threads in parallel
+	-m <number>
+		set the minimum number of tips required
+	-M <number>
+		set the maximum number of nodes allowed
+	-h
+		display help
+
+--------------------------
+

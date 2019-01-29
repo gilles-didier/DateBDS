@@ -213,14 +213,6 @@ int *removeSubtreeReturnIndex(int n, TypeTree *tree) {
         if(tree->comment != NULL)
             tree->comment[i] = NULL;
     }
-for(i=0; i<tree->size; i++)
-    fprintf(stderr, "index[%d] = %d\n", i, index[i]);
-    tree->root = index[tree->root];
-    tree->size = ind;
-fprintf(stderr, "\nAprès\n");
-fprintTreeX(stderr, tree);
-for(i=0; i<tree->size; i++)
-    fprintf(stderr, "p%d %d\n", i, tree->parent[i]);
     return index;
 }
 
@@ -322,12 +314,6 @@ void transfer(int m, int n, TypeTree *tree) {
     int pm = tree->parent[m], pn;
     if(pm == n)
         return;
-fprintf(stderr, "transfert %d (parent %d) to %d (parent %d)\n", m, tree->parent[m], n, tree->parent[n]);
-fprintf(stderr, "\nAvant\n");
-fprintTreeX(stderr, tree);
-int i;
-for(i=0; i<tree->size; i++)
-    fprintf(stderr, "p%d %d\n", i, tree->parent[i]);
     if(pm == NOSUCH)
         return;
     else { //unhang m
@@ -391,10 +377,6 @@ for(i=0; i<tree->size; i++)
     tree->node[pm].child = n;
     tree->node[n].sibling = m;
     tree->parent[n] = pm;
-    fprintf(stderr, "\nApres\n");
-    fprintTreeX(stderr, tree);
-    for(i=0; i<tree->size; i++)
-        fprintf(stderr, "p%d %d\n", i, tree->parent[i]);
 }
 
 /*return 1 if m descends from n*/
@@ -486,6 +468,31 @@ int *getParent(TypeTree *tree) {
             parent[c] = n;
     }
     return parent;
+}
+
+void fillNLeavesRec(int n, TypeTree *tree, int *nleaves) {
+	if(tree->node[n].child == NOSUCH)
+		nleaves[n] = 1;
+	else {
+		int c;
+		nleaves[n] = 0;
+		for(c=tree->node[n].child; c!=NOSUCH; c=tree->node[c].sibling) {
+			fillNLeavesRec(c, tree, nleaves);
+			nleaves[n] += nleaves[c];
+		}
+	}
+}
+
+/*return the table of parents*/
+int *getNLeaves(TypeTree *tree) {
+	int n, *nleaves;
+	if(tree->size == 0)
+		return NULL;
+	nleaves = (int*) malloc(tree->sizeBuf*sizeof(int));
+	for(n=0; n<tree->sizeBuf; n++)
+		nleaves[n] = 0;
+	fillNLeavesRec(tree->root, tree, nleaves);
+	return nleaves;
 }
 
 /*set the table of parents*/
@@ -943,6 +950,48 @@ void fprintNodeNewick(FILE *f, int n, TypeTree *tree) {
         fprintf(f, ")");
     }
     fprintIdentTimeComment(f, n, tree);
+}
+
+/*print ident, time and comment of node n*/
+void fprintIdent(FILE *f, int n, TypeTree *tree) {
+    if(tree->name && tree->name[n] != NULL)
+        fprintf(f, "'%s'", tree->name[n]);
+    else
+        fprintf(f, "'%d'", n);
+}
+
+
+/*print tree in newick format*/
+void fprintTreeNewickNoTime(FILE *f, TypeTree *tree) {
+    if(tree->size<=0)
+        return;
+    if(tree->node[tree->root].child >= 0) {
+        int tmp = tree->node[tree->root].child;
+        fprintf(f, "(");
+        fprintNodeNewickNoTime(f, tmp, tree);
+        for(tmp = tree->node[tmp].sibling; tmp >= 0; tmp = tree->node[tmp].sibling) {
+            fprintf(f, ", ");
+            fprintNodeNewickNoTime(f, tmp, tree);
+        }
+        fprintf(f, ")");
+    }
+    fprintIdent(f, tree->root, tree);
+    fprintf(f, ";\n");
+}
+
+/*print node in newick format*/
+void fprintNodeNewickNoTime(FILE *f, int n, TypeTree *tree) {
+    if(tree->node[n].child >= 0) {
+        int tmp = tree->node[n].child;
+        fprintf(f, "(");
+        fprintNodeNewickNoTime(f, tmp, tree);
+        for(tmp = tree->node[tmp].sibling; tmp >= 0; tmp = tree->node[tmp].sibling) {
+            fprintf(f, ", ");
+            fprintNodeNewickNoTime(f, tmp, tree);
+        }
+        fprintf(f, ")");
+    }
+    fprintIdent(f, n, tree);
 }
 
 /*read tree in newick format*/
@@ -1485,7 +1534,7 @@ TypeTree *pruneLeavesFromTable(TypeTree *tree, int *keep) {
 	free((void*)new);
 	free((void*)parent);
 	parent = getParent(resT);
-	for(n=0; n<resT->size && parent[n]>=0; n++);
+	for(n=0; n<resT->size && parent[n]!=NOSUCH; n++);
 	free((void*)parent);
 	resT->root = n;
 	return resT;
@@ -1570,16 +1619,15 @@ TypeTree *pruneContemp(TypeTree *tree) {
     return resT;
 }
 
-
-
 int iterateBinary(int n, TypeTree *resT, TypeTree *tree) {
     int m;
-    for(m=n; tree->node[m].child>=0 && tree->node[tree->node[m].child].sibling<0; m=tree->node[m].child);
+    for(m=n; tree->node[m].child != NOSUCH && tree->node[tree->node[m].child].sibling == NOSUCH; m=tree->node[m].child)
+		;
     if(tree->node[m].child>=0) {
         int c1, c2, c;
         c1 = iterateBinary(tree->node[m].child, resT, tree);
         c2 = c1;
-        for(c=tree->node[tree->node[m].child].sibling; c >= 0; c = tree->node[c].sibling) {
+        for(c=tree->node[tree->node[m].child].sibling; c != NOSUCH; c=tree->node[c].sibling) {
             resT->node[c2].sibling = iterateBinary(c, resT, tree);
             c2 = resT->node[c2].sibling;
         }
@@ -1615,12 +1663,14 @@ TypeTree *fixBinary(TypeTree *tree) {
             resT->comment[n] = NULL;
         }
     resT->size = 0;
-    iterateBinary(tree->root, resT, tree);
-    if(resT->parent == NULL)
-		resT->parent = (int*) malloc(resT->sizeBuf*sizeof(int));
-	setParent(resT);
-    for(n=0; n<resT->size && resT->parent[n]!=NOSUCH; n++);
-    resT->root = n;
+    if(tree->size>0) {
+		iterateBinary(tree->root, resT, tree);
+		if(resT->parent == NULL)
+			resT->parent = (int*) malloc(resT->sizeBuf*sizeof(int));
+		setParent(resT);
+		for(n=0; n<resT->size && resT->parent[n]!=NOSUCH; n++);
+		resT->root = n;
+	}
     return resT;
 }
 

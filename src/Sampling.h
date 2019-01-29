@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-void sampleTimes(double eps, TypeTree *tree, TypeModelParam *param, gsl_rng *rg);
+void sampleTimes(double eps, TypeTree *tree, TypePiecewiseModelParam *param, gsl_rng *rg);
 
 #ifdef __cplusplus
 }

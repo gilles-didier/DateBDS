@@ -77,6 +77,7 @@ extern "C" {
 namespace Tree {
 #endif
 
+int *getNLeaves(TypeTree *tree);
 void fillDepth(int node, int curDepth, TypeTree *tree, int *depth);
 double getMaximumLeafTime(TypeTree *tree);
 void fillTime(int n, double tanc, TypeTree *tree, double *min, double *max, int *dmax);
@@ -162,6 +163,12 @@ void fprintSubtreeNewick(FILE *f, int n, TypeTree *tree);
 void fprintTreeNewick(FILE *f, TypeTree *tree);
 /*print node in newick format*/
 void fprintNodeNewick(FILE *f, int n, TypeTree *tree);
+/*read tree in newick format*/
+void fprintIdent(FILE *f, int n, TypeTree *tree);
+/*print tree in newick format*/
+void fprintTreeNewickNoTime(FILE *f, TypeTree *tree);
+/*print node in newick format*/
+void fprintNodeNewickNoTime(FILE *f, int n, TypeTree *tree);
 /*read tree in newick format*/
 TypeTree *readTree(FILE *f);
 /*read a node in newick format*/

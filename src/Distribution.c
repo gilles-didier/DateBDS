@@ -42,15 +42,19 @@ double sumDistribution(TypeDistribution d) {
 void fprintDistribution(FILE *f, TypeDistribution d) {
 	int i;
 	for(i=0; i<d.size; i++)
-		fprintf(f, "%.2lf\t%le\n", d.item[i].val, d.item[i].dens);
+		fprintf(f, "%lf\t%le\n", d.item[i].val, d.item[i].dens);
 }
 
 void fprintDerive(FILE *f, TypeDistribution d) {
 	int i;
-	for(i=0; i<d.size-1; i++)
-		fprintf(f, "%.2lf\t%le\n", d.item[i].val, (d.item[i+1].dens-d.item[i].dens)/(d.item[i+1].val-d.item[i].val));
-	fprintf(f, "%.2lf\t%le\n", d.item[d.size-1].val, (d.item[d.size-1].dens-d.item[d.size-2].dens)/(d.item[d.size-1].val-d.item[d.size-2].val));
-	fprintf(f, "%.2lf\t%le\n", d.item[d.size-1].val, 0.);
+	for(i=0; i<d.size-1 && d.item[i].dens == 0.; i++)
+		fprintf(f, "%lf\t%le\n", d.item[i].val, 0.);
+	for(; i<d.size-1 && d.item[i].dens > 0.; i++)
+		fprintf(f, "%lf\t%le\n", d.item[i].val, (d.item[i+1].dens-d.item[i].dens)/(d.item[i+1].val-d.item[i].val));
+	for(; i<d.size-1; i++)
+		fprintf(f, "%lf\t%le\n", d.item[i].val, 0.);
+	fprintf(f, "%lf\t%le\n", d.item[d.size-1].val, (d.item[d.size-1].dens-d.item[d.size-2].dens)/(d.item[d.size-1].val-d.item[d.size-2].val));
+	fprintf(f, "%lf\t%le\n", d.item[d.size-1].val, 0.);
 }
 
 //void deriveDistribution(TypeDistribution *d) {
@@ -128,7 +132,7 @@ double getMedian(TypeDistribution d) {
 
 double getQuantileInf(TypeDistribution d, double q, double x) {
 	int i, ix;
-	double sum = 0.;
+	double sum;
 	if(d.size == 0)
 		return 0;
 	if(d.size == 1)
@@ -142,7 +146,7 @@ double getQuantileInf(TypeDistribution d, double q, double x) {
 
 double getQuantileSup(TypeDistribution d, double q, double x) {
 	int i, ix;
-	double sum = 0.;
+	double sum;
 	if(d.size == 0)
 		return 0;
 	if(d.size == 1)
